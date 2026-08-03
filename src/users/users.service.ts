@@ -47,9 +47,13 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
+    const { password } = updateUserDto;
+    const userData = { ...updateUserDto,
+      ...(password && { password: bcrypt.hashSync(password, 10) }),
+    };
     const user = await this.userRepository.preload({
       id,
-      ...updateUserDto,
+      ...userData,
     });
     if (!user) throw new NotFoundException(`User with id ${id} not found`);
     try {
