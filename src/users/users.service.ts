@@ -73,7 +73,8 @@ export class UsersService {
     if (!user) throw new NotFoundException(`User with id ${id} not found`);
     try {
       await this.userRepository.save(user);
-      return user;
+      const { password: _password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
     } catch (error) {
       this.handleDBErrors(error);
     }
