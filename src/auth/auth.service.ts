@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from 'src/users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { User } from 'src/users/entities/user.entity';
 
 interface PostgresError {
   code: string;
@@ -25,9 +26,8 @@ export class AuthService {
   async register(createUserDto: CreateUserDto) {
     try {
       const user = await this.userService.create(createUserDto);
-      const { password: _password, ...userWithoutPassword } = user;
       return {
-        ...userWithoutPassword,
+        ...this.excludePassword(user),
         token: this.getJwtToken({ id: user.id }),
       };
     } catch (error) {
@@ -43,12 +43,15 @@ export class AuthService {
       throw new BadRequestException('Credentials are not valid');
     }
 
-    const { password: _password, ...userWithoutPassword } = user;
-
     return {
-      ...userWithoutPassword,
+      ...this.excludePassword(user),
       token: this.getJwtToken({ id: user.id }),
     };
+  }
+
+  private excludePassword(user: User) {
+    const { password: _password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 
   private getJwtToken(payload: { id: string }) {
