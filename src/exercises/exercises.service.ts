@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { CreateExerciseDto, UpdateExerciseDto } from './dto';
 import { ExerciseImage, Exercise } from './entities';
 import { User } from 'src/users/entities/user.entity';
+import { FindExercisesDto } from './dto/find.exercise.dto';
 
 @Injectable()
 export class ExercisesService {
@@ -62,10 +63,21 @@ export class ExercisesService {
     });
   }
 
-  findAll() {
-    return this.exerciseRepository.find({
-      relations: { images: true },
-    });
+  findAll(findExercisesDto: FindExercisesDto) {
+    const { name, muscle, equipment } = findExercisesDto;
+    const query = this.exerciseRepository
+      .createQueryBuilder('exercise')
+      .leftJoinAndSelect('exercise.images', 'images');
+    if (name) {
+      query.andWhere('exercise.name ILIKE :name', { name: `%${name}%` });
+    }
+    if (muscle) {
+      query.andWhere(':muscle = ANY(exercise.primaryMuscles)', { muscle });
+    }
+    if (equipment) {
+      query.andWhere('exercise.equipment = :equipment', { equipment });
+    }
+    return query.getMany();
   }
 
   async findOne(id: string) {
