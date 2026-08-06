@@ -1,26 +1,98 @@
-import { Injectable } from '@nestjs/common';
-import { CreateExerciseDto } from './dto/create-exercise.dto';
-import { UpdateExerciseDto } from './dto/update-exercise.dto';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { CreateExerciseDto, UpdateExerciseDto } from './dto';
+import { ExerciseImage, Exercise } from './entities';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class ExercisesService {
-  create(createExerciseDto: CreateExerciseDto) {
-    return 'This action adds a new exercise';
+  constructor(
+    @InjectRepository(Exercise)
+    private readonly exerciseRepository: Repository<Exercise>,
+    @InjectRepository(ExerciseImage)
+    private readonly exerciseImageRepository: Repository<ExerciseImage>,
+  ) {}
+
+  async create(createExerciseDto: CreateExerciseDto, user: User) {
+    const { images = [], ...exerciseData } = createExerciseDto;
+    const exercise = this.exerciseRepository.create({
+      ...exerciseData,
+      createdBy: user,
+      images: images.map((url) =>
+        this.exerciseImageRepository.create({ url, uploadedBy: user }),
+      ),
+    });
+    return this.exerciseRepository.save(exercise);
+  }
+
+  async update(id: string, updateExerciseDto: UpdateExerciseDto, user: User) {
+    const existingExercise = await this.exerciseRepository.findOne({
+      where: { id },
+      relations: { createdBy: true },
+    });
+    if (!existingExercise) throw new NotFoundException('Exercise not found');
+
+    if (existingExercise.createdBy?.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to edit this exercise',
+      );
+    }
+    const { images, ...toUpdate } = updateExerciseDto;
+    const exercise = await this.exerciseRepository.preload({
+      id,
+      ...toUpdate,
+    });
+
+    if (images) {
+      await this.exerciseImageRepository.delete({ exercise: { id } });
+      exercise!.images = images.map((url) =>
+        this.exerciseImageRepository.create({ url, uploadedBy: user }),
+      );
+    }
+    await this.exerciseRepository.save(exercise!);
+    return this.exerciseRepository.findOne({
+      where: { id },
+      relations: { images: true },
+    });
   }
 
   findAll() {
-    return `This action returns all exercises`;
+    return this.exerciseRepository.find({
+      relations: { images: true },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} exercise`;
+  async findOne(id: string) {
+    const exercise = await this.exerciseRepository.findOne({
+      where: { id },
+      relations: { images: true },
+    });
+    if (!exercise)
+      throw new NotFoundException(`Exercise with id ${id} not found`);
+    return exercise;
   }
 
-  update(id: number, updateExerciseDto: UpdateExerciseDto) {
-    return `This action updates a #${id} exercise`;
-  }
+  async remove(id: string, user: User) {
+    const exercise = await this.exerciseRepository.findOne({
+      where: { id },
+      relations: { createdBy: true },
+    });
 
-  remove(id: number) {
-    return `This action removes a #${id} exercise`;
+    if (!exercise)
+      throw new NotFoundException(`Exercise with id ${id} not found`);
+
+    if (exercise.createdBy?.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this exercise',
+      );
+    }
+
+    await this.exerciseRepository.remove(exercise);
   }
 }
