@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { SeedService } from './seed.service';
-import { SeedController } from './seed.controller';
+import { ExercisesModule } from 'src/exercises/exercises.module';
 
 @Module({
-  controllers: [SeedController],
   providers: [SeedService],
+  exports: [ExercisesModule],
 })
 export class SeedModule {}
