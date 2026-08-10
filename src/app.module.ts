@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ExercisesModule } from './exercises/exercises.module';
 import { SeedModule } from './seed/seed.module';
+import { RoutinesModule } from './routines/routines.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SeedModule } from './seed/seed.module';
     AuthModule,
     ExercisesModule,
     SeedModule,
+    RoutinesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
