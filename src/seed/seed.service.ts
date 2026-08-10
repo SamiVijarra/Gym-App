@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Exercise, ExerciseImage } from 'src/exercises/entities';
 import { Repository } from 'typeorm';
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { Exercise, ExerciseImage } from 'src/exercises/entities';
 
 interface RawExercise {
   id: string;
@@ -20,7 +24,31 @@ export class SeedService {
     private readonly exerciseImageRepository: Repository<ExerciseImage>,
   ) {}
 
-  async seedExercises() {}
+  async seedExercises() {
+    const filePath = path.join(__dirname, 'data', 'exercises-data.json');
+    const rawData = fs.readFileSync(filePath, 'utf-8');
+    const exercises = JSON.parse(rawData) as RawExercise[];
+
+    let inserted = 0;
+    let skipped = 0;
+
+    for (const item of exercises) {
+      const exists = await this.exerciseRepository.findOne({
+        where: { sourceId: item.id },
+      });
+      if (exists) {
+        skipped++;
+        continue;
+      }
+      const exerciseData = this.transformExercise(item);
+      const exercise = this.exerciseRepository.create(exerciseData);
+      await this.exerciseRepository.save(exercise);
+      inserted++;
+    }
+    console.log(
+      `Seed completo: ${inserted} insertados, ${skipped} ya existían.`,
+    );
+  }
 
   private transformExercise(item: RawExercise) {
     return {

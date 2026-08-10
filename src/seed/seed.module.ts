@@ -3,7 +3,7 @@ import { SeedService } from './seed.service';
 import { ExercisesModule } from 'src/exercises/exercises.module';
 
 @Module({
+  imports: [ExercisesModule],
   providers: [SeedService],
-  exports: [ExercisesModule],
 })
 export class SeedModule {}
