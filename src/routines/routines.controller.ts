@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
 import { RoutinesService } from './routines.service';
 import { CreateRoutineDto } from './dto/create-routine-day.dto';
-import { UpdateRoutineDto } from './dto/update-routine.dto';
+import { UpdateRoutineDto } from './dto/update-routine-day.dto';
 
 @Controller('routines')
 export class RoutinesController {
