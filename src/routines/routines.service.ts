@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CreateRoutineDto } from './dto/create-routine.dto';
+import { CreateRoutineDto } from './dto/create-routine-day.dto';
 import { UpdateRoutineDto } from './dto/update-routine.dto';
 
 @Injectable()

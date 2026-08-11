@@ -1,5 +1,6 @@
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { RoutineExercise } from './routine-exercise.entity';
+import { User } from 'src/users/entities/user.entity';
 
 @Entity('sets')
 export class Set {
@@ -10,6 +11,9 @@ export class Set {
     onDelete: 'CASCADE',
   })
   routineExercise!: RoutineExercise;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  user!: User;
 
   @Column('int')
   order!: number;

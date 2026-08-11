@@ -9,11 +9,15 @@ import {
 import { Exercise } from 'src/exercises/entities';
 import { RoutineDay } from './routine-day.entity';
 import { Set } from './set.entity';
+import { User } from 'src/users/entities/user.entity';
 
 @Entity('routine_exercises')
 export class RoutineExercise {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  user!: User;
 
   @ManyToOne(() => RoutineDay, (routineDay) => routineDay.exercises, {
     onDelete: 'CASCADE',
