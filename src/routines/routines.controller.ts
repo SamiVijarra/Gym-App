@@ -28,25 +28,21 @@ export class RoutinesController {
   }
 
   @Get()
-  findAll() {
-    return this.routinesService.findAll();
+  findMyRoutine(@GetUser() user: User) {
+    return this.routinesService.findMyRoutine(user);
   }
 
-  @Get(':id')
-  findMy(@Param('id') id: string) {
-    return this.routinesService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(
+  @Patch('days/:id')
+  updatedDay(
     @Param('id') id: string,
     @Body() updateRoutineDayDto: UpdateRoutineDayDto,
+    @GetUser() user: User,
   ) {
-    return this.routinesService.updateDay(+id, updateRoutineDayDto);
+    return this.routinesService.updateDay(id, updateRoutineDayDto, user);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.routinesService.remove(+id);
+  @Delete('days/:id')
+  removeDay(@Param('id') id: string, @GetUser() user: User) {
+    return this.routinesService.removeDay(id, user);
   }
 }
