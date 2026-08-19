@@ -106,7 +106,7 @@ export class RoutinesController {
     return this.routinesService.updateSet(id, updateSetDto, user);
   }
 
-  @Delete('sets/:is')
+  @Delete('sets/:id')
   removeSet(@Param('id', ParseUUIDPipe) id: string, @GetUser() user: User) {
     return this.routinesService.removeSet(id, user);
   }
