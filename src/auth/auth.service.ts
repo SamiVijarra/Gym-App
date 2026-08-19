@@ -66,4 +66,11 @@ export class AuthService {
     }
     throw new InternalServerErrorException('Please check server logs');
   }
+
+  checkAuthStatus(user: User) {
+    return {
+      ...this.excludePassword(user),
+      token: this.getJwtToken({ id: user.id }),
+    };
+  }
 }
