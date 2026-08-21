@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { ExercisesModule } from './exercises/exercises.module';
 import { SeedModule } from './seed/seed.module';
 import { RoutinesModule } from './routines/routines.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RoutinesModule } from './routines/routines.module';
     ExercisesModule,
     SeedModule,
     RoutinesModule,
+    CalendarModule,
   ],
   controllers: [AppController],
   providers: [AppService],
