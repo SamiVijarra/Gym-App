@@ -8,6 +8,7 @@ import {
 import { HistoryEntry } from './history-entry.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Exercise } from 'src/exercises/entities';
+import { HistorySet } from './history-set.entity';
 
 @Entity('history_exercises')
 export class HistoryExercise {
