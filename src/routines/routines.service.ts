@@ -204,4 +204,8 @@ export class RoutinesService {
     }
     throw new InternalServerErrorException('Please check server logs');
   }
+
+  findDayOwnedByUser(id: string, user: User) {
+    return this.findDayAndVerifyOwner(id, user);
+  }
 }
