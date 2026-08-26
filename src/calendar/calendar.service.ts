@@ -1,12 +1,28 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Between, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { User } from 'src/users/entities/user.entity';
-import { PlanDayDto } from './dto/plan-day.dto';
-import { CalendarEntry, CalendarStatus, HistoryEntry } from './entities';
+import {
+  CalendarEntry,
+  CalendarStatus,
+  HistoryEntry,
+  HistoryExercise,
+  HistorySet,
+} from './entities';
 import { RoutinesService } from 'src/routines/routines.service';
-import { GetSessionPrefillDto } from './dto/get-session-prefill.dto';
+import { ExercisesService } from 'src/exercises/exercises.service';
+import {
+  CompleteSessionDto,
+  GetSessionPrefillDto,
+  PlanDayDto,
+  UpdateHistoryNotesDto,
+} from './dto';
 
 @Injectable()
 export class CalendarService {
@@ -15,7 +31,12 @@ export class CalendarService {
     private readonly calendarEntryRepository: Repository<CalendarEntry>,
     @InjectRepository(HistoryEntry)
     private readonly historyEntryRepository: Repository<HistoryEntry>,
+    @InjectRepository(HistoryExercise)
+    private readonly historyExerciseRepository: Repository<HistoryExercise>,
+    @InjectRepository(HistorySet)
+    private readonly historySetRepository: Repository<HistorySet>,
     private readonly routinesService: RoutinesService,
+    private readonly exercisesService: ExercisesService,
   ) {}
 
   findMyCalendar(user: User, year: number, month: number) {
@@ -52,14 +73,6 @@ export class CalendarService {
     });
 
     return this.calendarEntryRepository.save(calendarEntry);
-  }
-
-  private getMonthRange(year: number, month: number) {
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-    return { startDate, endDate };
   }
 
   async getSessionPrefill(
@@ -107,5 +120,139 @@ export class CalendarService {
       hasHistory: !!lastHistoryEntry,
       exercises,
     };
+  }
+
+  async completeSession(completeSessionDto: CompleteSessionDto, user: User) {
+    const { date, routineDayId, exercises } = completeSessionDto;
+
+    const routineDay = routineDayId
+      ? await this.routinesService.findDayOwnedByUser(routineDayId, user)
+      : undefined;
+
+    const historyExercises = await Promise.all(
+      exercises.map(async (exerciseDto, exerciseIndex) => {
+        const exercise = await this.exercisesService.findOne(
+          exerciseDto.exerciseId,
+        );
+
+        return this.historyExerciseRepository.create({
+          exercise,
+          user,
+          order: exerciseIndex + 1,
+          notes: exerciseDto.notes,
+          sets: exerciseDto.sets.map((setDto, setIndex) =>
+            this.historySetRepository.create({
+              user,
+              order: setIndex + 1,
+              weight: setDto.weight,
+              reps: setDto.reps,
+              restSeconds: setDto.restSeconds,
+              notes: setDto.notes,
+            }),
+          ),
+        });
+      }),
+    );
+
+    const historyEntry = this.historyEntryRepository.create({
+      user,
+      date,
+      routineDay,
+      exercises: historyExercises,
+    });
+
+    const savedHistoryEntry =
+      await this.historyEntryRepository.save(historyEntry);
+
+    const existingCalendarEntry = await this.calendarEntryRepository.findOne({
+      where: {
+        user: { id: user.id },
+        date,
+        status: CalendarStatus.PLANNED,
+        ...(routineDayId ? { routineDay: { id: routineDayId } } : {}),
+      },
+    });
+
+    if (existingCalendarEntry) {
+      existingCalendarEntry.status = CalendarStatus.DONE;
+      existingCalendarEntry.historyEntry = savedHistoryEntry;
+      return this.calendarEntryRepository.save(existingCalendarEntry);
+    }
+
+    const newCalendarEntry = this.calendarEntryRepository.create({
+      user,
+      date,
+      status: CalendarStatus.DONE,
+      routineDay,
+      historyEntry: savedHistoryEntry,
+    });
+
+    return this.calendarEntryRepository.save(newCalendarEntry);
+  }
+
+  private getMonthRange(year: number, month: number) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    return { startDate, endDate };
+  }
+
+  async updateHistoryExerciseNotes(
+    id: string,
+    updateHistoryNotesDto: UpdateHistoryNotesDto,
+    user: User,
+  ) {
+    await this.findHistoryExerciseAndVerifyOwner(id, user);
+    const updated = await this.historyExerciseRepository.preload({
+      id,
+      notes: updateHistoryNotesDto.notes,
+    });
+    return this.historyExerciseRepository.save(updated!);
+  }
+
+  async updateHistorySetNotes(
+    id: string,
+    updateHistoryNotesDto: UpdateHistoryNotesDto,
+    user: User,
+  ) {
+    await this.findHistorySetAndVerifyOwner(id, user);
+    const updated = await this.historySetRepository.preload({
+      id,
+      notes: updateHistoryNotesDto.notes,
+    });
+    return this.historySetRepository.save(updated!);
+  }
+
+  private async findHistoryExerciseAndVerifyOwner(id: string, user: User) {
+    const historyExercise = await this.historyExerciseRepository.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+    if (!historyExercise) {
+      throw new NotFoundException(`History exercise with id ${id} not found`);
+    }
+    if (historyExercise.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this history exercise',
+      );
+    }
+    return historyExercise;
+  }
+
+  private async findHistorySetAndVerifyOwner(id: string, user: User) {
+    const historySet = await this.historySetRepository.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+    if (!historySet) {
+      throw new NotFoundException(`History set with id ${id} not found`);
+    }
+    if (historySet.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this history set',
+      );
+    }
+    return historySet;
   }
 }
