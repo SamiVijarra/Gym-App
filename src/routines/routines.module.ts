@@ -12,5 +12,6 @@ import { ExercisesModule } from 'src/exercises/exercises.module';
   ],
   controllers: [RoutinesController],
   providers: [RoutinesService],
+  exports: [RoutinesService],
 })
 export class RoutinesModule {}
