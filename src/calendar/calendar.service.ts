@@ -224,6 +224,28 @@ export class CalendarService {
     return this.historySetRepository.save(updated!);
   }
 
+  async findHistoryEntryOwnedByUser(id: string, user: User) {
+    const historyEntry = await this.historyEntryRepository.findOne({
+      where: { id },
+      relations: {
+        user: true,
+        routineDay: true,
+        exercises: { exercise: true, sets: true },
+      },
+    });
+
+    if (!historyEntry) {
+      throw new NotFoundException(`History entry with id ${id} not found`);
+    }
+    if (historyEntry.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this history entry',
+      );
+    }
+
+    return historyEntry;
+  }
+
   private async findHistoryExerciseAndVerifyOwner(id: string, user: User) {
     const historyExercise = await this.historyExerciseRepository.findOne({
       where: { id },
