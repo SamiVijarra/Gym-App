@@ -208,4 +208,12 @@ export class RoutinesService {
   findDayOwnedByUser(id: string, user: User) {
     return this.findDayAndVerifyOwner(id, user);
   }
+
+  async findDayWithDetailsOwnedByUser(id: string, user: User) {
+    await this.findDayAndVerifyOwner(id, user);
+    return this.routineDayRepository.findOne({
+      where: { id },
+      relations: { exercises: { exercise: true } },
+    });
+  }
 }
