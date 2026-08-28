@@ -48,6 +48,10 @@ export class CompleteSessionDto {
   @IsUUID()
   routineDayId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  calendarEntryId?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CompleteSessionExerciseDto)

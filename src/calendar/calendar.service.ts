@@ -123,7 +123,8 @@ export class CalendarService {
   }
 
   async completeSession(completeSessionDto: CompleteSessionDto, user: User) {
-    const { date, routineDayId, exercises } = completeSessionDto;
+    const { date, routineDayId, calendarEntryId, exercises } =
+      completeSessionDto;
 
     const routineDay = routineDayId
       ? await this.routinesService.findDayOwnedByUser(routineDayId, user)
@@ -164,15 +165,27 @@ export class CalendarService {
     const savedHistoryEntry =
       await this.historyEntryRepository.save(historyEntry);
 
-    const existingCalendarEntry = await this.calendarEntryRepository.findOne({
-      where: {
-        user: { id: user.id },
-        date,
-        status: CalendarStatus.PLANNED,
-        ...(routineDayId ? { routineDay: { id: routineDayId } } : {}),
-      },
-    });
-
+    const existingCalendarEntry = calendarEntryId
+      ? await this.calendarEntryRepository.findOne({
+          where: {
+            id: calendarEntryId,
+            user: { id: user.id },
+            status: CalendarStatus.PLANNED,
+          },
+        })
+      : await this.calendarEntryRepository.findOne({
+          where: {
+            user: { id: user.id },
+            date,
+            status: CalendarStatus.PLANNED,
+            ...(routineDayId ? { routineDay: { id: routineDayId } } : {}),
+          },
+        });
+    if (calendarEntryId && !existingCalendarEntry) {
+      throw new NotFoundException(
+        `Planned calendar entry with id ${calendarEntryId} not found`,
+      );
+    }
     if (existingCalendarEntry) {
       existingCalendarEntry.status = CalendarStatus.DONE;
       existingCalendarEntry.historyEntry = savedHistoryEntry;
@@ -188,6 +201,28 @@ export class CalendarService {
     });
 
     return this.calendarEntryRepository.save(newCalendarEntry);
+  }
+
+  async cancelPlannedDay(id: string, user: User) {
+    const calendarEntry = await this.calendarEntryRepository.findOne({
+      where: { id },
+      relations: { user: true },
+    });
+
+    if (!calendarEntry) {
+      throw new NotFoundException(`Calendar entry with id ${id} not found`);
+    }
+    if (calendarEntry.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this calendar entry',
+      );
+    }
+    if (calendarEntry.status !== CalendarStatus.PLANNED) {
+      throw new BadRequestException('Only planned entries can be canceled');
+    }
+
+    await this.calendarEntryRepository.remove(calendarEntry);
+    return { id };
   }
 
   private getMonthRange(year: number, month: number) {
