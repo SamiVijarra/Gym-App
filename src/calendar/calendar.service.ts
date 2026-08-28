@@ -232,6 +232,9 @@ export class CalendarService {
         routineDay: true,
         exercises: { exercise: true, sets: true },
       },
+      order: {
+        exercises: { order: 'ASC', sets: { order: 'ASC' } },
+      },
     });
 
     if (!historyEntry) {
