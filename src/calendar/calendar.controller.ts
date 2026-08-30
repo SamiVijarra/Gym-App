@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
   Param,
   UseGuards,
   Query,
@@ -88,5 +89,13 @@ export class CalendarController {
       updateHistoryNotesDto,
       user,
     );
+  }
+
+  @Delete(':id')
+  cancelPlannedDay(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: User,
+  ) {
+    return this.calendarService.cancelPlannedDay(id, user);
   }
 }
