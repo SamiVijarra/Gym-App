@@ -53,7 +53,10 @@ export class RoutinesService {
     return this.routineDayRepository.find({
       where: { user: { id: user.id } },
       relations: { exercises: { exercise: true, sets: true } },
-      order: { dayNumber: 'ASC' },
+      order: {
+        dayNumber: 'ASC',
+        exercises: { order: 'ASC', sets: { order: 'ASC' } },
+      },
     });
   }
 
