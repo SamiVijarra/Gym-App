@@ -233,6 +233,32 @@ export class CalendarService {
     return { startDate, endDate };
   }
 
+  async findExerciseHistory(exerciseId: string, user: User) {
+    const historyExercises = await this.historyExerciseRepository.find({
+      where: {
+        exercise: { id: exerciseId },
+        user: { id: user.id },
+      },
+      relations: { historyEntry: true, sets: true },
+      order: {
+        historyEntry: { date: 'ASC' },
+        sets: { order: 'ASC' },
+      },
+    });
+
+    return historyExercises.map((historyExercise) => ({
+      historyExerciseId: historyExercise.id,
+      date: historyExercise.historyEntry.date,
+      notes: historyExercise.notes,
+      sets: (historyExercise.sets ?? []).map((set) => ({
+        order: set.order,
+        weight: set.weight,
+        reps: set.reps,
+        restSeconds: set.restSeconds,
+      })),
+    }));
+  }
+
   async updateHistoryExerciseNotes(
     id: string,
     updateHistoryNotesDto: UpdateHistoryNotesDto,
