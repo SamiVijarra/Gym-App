@@ -216,7 +216,7 @@ export class RoutinesService {
     await this.findDayAndVerifyOwner(id, user);
     return this.routineDayRepository.findOne({
       where: { id },
-      relations: { exercises: { exercise: true } },
+      relations: { exercises: { exercise: true, sets: true } },
     });
   }
 }

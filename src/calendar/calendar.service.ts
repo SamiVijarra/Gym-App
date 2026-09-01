@@ -165,6 +165,14 @@ export class CalendarService {
     const savedHistoryEntry =
       await this.historyEntryRepository.save(historyEntry);
 
+    if (routineDayId) {
+      await this.syncRoutineTemplate(
+        routineDayId,
+        savedHistoryEntry.exercises ?? [],
+        user,
+      );
+    }
+
     const existingCalendarEntry = calendarEntryId
       ? await this.calendarEntryRepository.findOne({
           where: {
@@ -340,5 +348,42 @@ export class CalendarService {
       );
     }
     return historySet;
+  }
+
+  private async syncRoutineTemplate(
+    routineDayId: string,
+    historyExercises: HistoryExercise[],
+    user: User,
+  ) {
+    const routineDay = await this.routinesService.findDayWithDetailsOwnedByUser(
+      routineDayId,
+      user,
+    );
+    if (!routineDay?.exercises) return;
+
+    for (const historyExercise of historyExercises) {
+      const routineExercise = routineDay.exercises.find(
+        (re) => re.exercise.id === historyExercise.exercise.id,
+      );
+      if (!routineExercise) continue;
+
+      for (const historySet of historyExercise.sets ?? []) {
+        const routineSet = (routineExercise.sets ?? []).find(
+          (s) => s.order === historySet.order,
+        );
+
+        const values = {
+          weight: historySet.weight,
+          reps: historySet.reps,
+          restSeconds: historySet.restSeconds,
+        };
+
+        if (routineSet) {
+          await this.routinesService.updateSet(routineSet.id, values, user);
+        } else {
+          await this.routinesService.addSet(routineExercise.id, values, user);
+        }
+      }
+    }
   }
 }
