@@ -97,9 +97,6 @@ export class ExercisesService {
     const exercise = await this.exerciseRepository.findOne({
       where: { id },
       relations: { createdBy: true },
-      select: {
-        createdBy: { id: true },
-      },
     });
 
     if (!exercise)
