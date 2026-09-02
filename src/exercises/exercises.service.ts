@@ -83,7 +83,10 @@ export class ExercisesService {
   async findOne(id: string) {
     const exercise = await this.exerciseRepository.findOne({
       where: { id },
-      relations: { images: true },
+      relations: { images: true, createdBy: true },
+      select: {
+        createdBy: { id: true },
+      },
     });
     if (!exercise)
       throw new NotFoundException(`Exercise with id ${id} not found`);
@@ -94,6 +97,9 @@ export class ExercisesService {
     const exercise = await this.exerciseRepository.findOne({
       where: { id },
       relations: { createdBy: true },
+      select: {
+        createdBy: { id: true },
+      },
     });
 
     if (!exercise)
