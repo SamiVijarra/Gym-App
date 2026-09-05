@@ -18,6 +18,7 @@ import {
 } from './dto';
 import { User } from 'src/users/entities/user.entity';
 import { RoutineDay, RoutineExercise, Set } from './entities';
+import { CalendarEntry, CalendarStatus } from 'src/calendar/entities';
 import { ExercisesService } from 'src/exercises/exercises.service';
 import { UpdateRoutineExerciseDto } from './dto/update-routine-exercise.dto';
 
@@ -35,6 +36,8 @@ export class RoutinesService {
     private readonly routineExerciseRepository: Repository<RoutineExercise>,
     @InjectRepository(Set)
     private readonly setRepository: Repository<Set>,
+    @InjectRepository(CalendarEntry)
+    private readonly calendarEntryRepository: Repository<CalendarEntry>,
     private readonly exercisesService: ExercisesService,
   ) {}
   async createDay(createRoutineDayDto: CreateRoutineDayDto, user: User) {
@@ -75,6 +78,11 @@ export class RoutinesService {
 
   async removeDay(id: string, user: User) {
     const day = await this.findDayAndVerifyOwner(id, user);
+
+    await this.calendarEntryRepository.delete({
+      routineDay: { id },
+      status: CalendarStatus.PLANNED,
+    });
     return this.routineDayRepository.remove(day);
   }
 
