@@ -57,7 +57,7 @@ export class CalendarService {
 
     const today = new Date().toISOString().split('T')[0];
     if (date < today) {
-      throw new BadRequestException('No se puede planificar el día');
+      throw new BadRequestException('The day cannot be in the past');
     }
 
     const routineDay = await this.routinesService.findDayOwnedByUser(
@@ -87,7 +87,7 @@ export class CalendarService {
 
     const lastHistoryEntry = await this.historyEntryRepository.findOne({
       where: { user: { id: user.id }, routineDay: { id: routineDayId } },
-      relations: { exercises: { exercise: true, sets: true } },
+      relations: { exercises: { exercise: { images: true }, sets: true } },
       order: { date: 'DESC' },
     });
 
@@ -299,7 +299,7 @@ export class CalendarService {
       relations: {
         user: true,
         routineDay: true,
-        exercises: { exercise: true, sets: true },
+        exercises: { exercise: { images: true }, sets: true },
       },
       order: {
         exercises: { order: 'ASC', sets: { order: 'ASC' } },
