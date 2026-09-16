@@ -11,6 +11,7 @@ import {
   HistoryEntry,
   HistoryExercise,
   HistorySet,
+  WeeklyGoal,
 } from './entities';
 
 @Module({
@@ -20,6 +21,7 @@ import {
       HistoryEntry,
       HistoryExercise,
       HistorySet,
+      WeeklyGoal,
     ]),
     RoutinesModule,
     ExercisesModule,

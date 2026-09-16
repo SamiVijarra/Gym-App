@@ -14,6 +14,7 @@ import {
   HistoryEntry,
   HistoryExercise,
   HistorySet,
+  WeeklyGoal,
 } from './entities';
 import { RoutinesService } from 'src/routines/routines.service';
 import { ExercisesService } from 'src/exercises/exercises.service';
@@ -21,6 +22,7 @@ import {
   CompleteSessionDto,
   GetSessionPrefillDto,
   PlanDayDto,
+  SetWeeklyGoalDto,
   UpdateHistoryNotesDto,
 } from './dto';
 
@@ -35,6 +37,8 @@ export class CalendarService {
     private readonly historyExerciseRepository: Repository<HistoryExercise>,
     @InjectRepository(HistorySet)
     private readonly historySetRepository: Repository<HistorySet>,
+    @InjectRepository(WeeklyGoal)
+    private readonly weeklyGoalRepository: Repository<WeeklyGoal>,
     private readonly routinesService: RoutinesService,
     private readonly exercisesService: ExercisesService,
   ) {}
@@ -233,7 +237,7 @@ export class CalendarService {
     return { id };
   }
 
-  async getStatus(user: User) {
+  async getStats(user: User) {
     const now = new Date();
     const { startDate, endDate } = this.getMonthRange(
       now.getFullYear(),
@@ -247,46 +251,10 @@ export class CalendarService {
         date: Between(startDate, endDate),
       },
     });
-
     const monthSessionsCompleted = monthEntries.length;
     const monthActiveDays = new Set(monthEntries.map((e) => e.date)).size;
 
-    const allDoneEntries = await this.calendarEntryRepository.find({
-      where: {
-        user: { id: user.id },
-        status: CalendarStatus.DONE,
-      },
-    });
-
-    const doneDates = [...new Set(allDoneEntries.map((e) => e.date))].sort(
-      (a, b) => (a < b ? 1 : -1),
-    );
-
-    let currentStreakDays = 0;
-    if (doneDates.length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const mostRecent = new Date(doneDates[0]);
-      const daysSinceMostRecent = Math.floor(
-        (today.getTime() - mostRecent.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      if (daysSinceMostRecent <= 1) {
-        currentStreakDays = 1;
-        for (let i = 1; i < doneDates.length; i++) {
-          const prev = new Date(doneDates[i - 1]);
-          const curr = new Date(doneDates[i]);
-          const diffDays = Math.round(
-            (prev.getTime() - curr.getTime()) / (1000 * 60 * 60 * 24),
-          );
-          if (diffDays === 1) {
-            currentStreakDays++;
-          } else {
-            break;
-          }
-        }
-      }
-    }
+    const currentStreakWeeks = await this.calculateWeeklyStreak(user);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const { total } = await this.historySetRepository
@@ -298,9 +266,115 @@ export class CalendarService {
     return {
       monthSessionsCompleted,
       monthActiveDays,
-      currentStreakDays,
+      currentStreakWeeks,
       totalVolumeKg: Number(total) || 0,
     };
+  }
+
+  async setWeeklyGoal(dto: SetWeeklyGoalDto, user: User) {
+    const weekStart = this.getWeekStart(new Date(dto.weekStart));
+
+    let goal = await this.weeklyGoalRepository.findOne({
+      where: { user: { id: user.id }, weekStart },
+    });
+
+    if (goal) {
+      goal.targetDays = dto.targetDays;
+    } else {
+      goal = this.weeklyGoalRepository.create({
+        user,
+        weekStart,
+        targetDays: dto.targetDays,
+      });
+    }
+
+    return this.weeklyGoalRepository.save(goal);
+  }
+
+  async getWeeklyGoal(weekStartInput: string, user: User) {
+    const weekStart = this.getWeekStart(new Date(weekStartInput));
+
+    const goal = await this.weeklyGoalRepository.findOne({
+      where: { user: { id: user.id }, weekStart },
+    });
+
+    const doneDays = await this.countDoneDaysInWeek(user, weekStart);
+
+    return {
+      weekStart,
+      targetDays: goal?.targetDays ?? null,
+      doneDays,
+    };
+  }
+
+  private async calculateWeeklyStreak(user: User): Promise<number> {
+    const currentWeekStart = this.getWeekStart(new Date());
+    let streak = 0;
+    let cursor = currentWeekStart;
+    let isCurrentWeek = true;
+
+    while (streak < 104) {
+      const goal = await this.weeklyGoalRepository.findOne({
+        where: { user: { id: user.id }, weekStart: cursor },
+      });
+
+      if (!goal) {
+        if (isCurrentWeek) {
+          cursor = this.shiftWeek(cursor, -7);
+          isCurrentWeek = false;
+          continue;
+        }
+        break;
+      }
+
+      const doneDays = await this.countDoneDaysInWeek(user, cursor);
+
+      if (isCurrentWeek && doneDays < goal.targetDays) {
+        cursor = this.shiftWeek(cursor, -7);
+        isCurrentWeek = false;
+        continue;
+      }
+
+      if (doneDays >= goal.targetDays) {
+        streak++;
+        cursor = this.shiftWeek(cursor, -7);
+        isCurrentWeek = false;
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  private async countDoneDaysInWeek(
+    user: User,
+    weekStart: string,
+  ): Promise<number> {
+    const weekEnd = this.shiftWeek(weekStart, 6);
+    const entries = await this.calendarEntryRepository.find({
+      where: {
+        user: { id: user.id },
+        status: CalendarStatus.DONE,
+        date: Between(weekStart, weekEnd),
+      },
+    });
+    return new Set(entries.map((e) => e.date)).size;
+  }
+
+  private getWeekStart(date: Date): string {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay(); // 0 = domingo
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  private shiftWeek(weekStart: string, days: number): string {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
   }
 
   private getMonthRange(year: number, month: number) {
