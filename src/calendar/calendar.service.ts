@@ -233,6 +233,76 @@ export class CalendarService {
     return { id };
   }
 
+  async getStatus(user: User) {
+    const now = new Date();
+    const { startDate, endDate } = this.getMonthRange(
+      now.getFullYear(),
+      now.getMonth() + 1,
+    );
+
+    const monthEntries = await this.calendarEntryRepository.find({
+      where: {
+        user: { id: user.id },
+        status: CalendarStatus.DONE,
+        date: Between(startDate, endDate),
+      },
+    });
+
+    const monthSessionsCompleted = monthEntries.length;
+    const monthActiveDays = new Set(monthEntries.map((e) => e.date)).size;
+
+    const allDoneEntries = await this.calendarEntryRepository.find({
+      where: {
+        user: { id: user.id },
+        status: CalendarStatus.DONE,
+      },
+    });
+
+    const doneDates = [...new Set(allDoneEntries.map((e) => e.date))].sort(
+      (a, b) => (a < b ? 1 : -1),
+    );
+
+    let currentStreakDays = 0;
+    if (doneDates.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const mostRecent = new Date(doneDates[0]);
+      const daysSinceMostRecent = Math.floor(
+        (today.getTime() - mostRecent.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (daysSinceMostRecent <= 1) {
+        currentStreakDays = 1;
+        for (let i = 1; i < doneDates.length; i++) {
+          const prev = new Date(doneDates[i - 1]);
+          const curr = new Date(doneDates[i]);
+          const diffDays = Math.round(
+            (prev.getTime() - curr.getTime()) / (1000 * 60 * 60 * 24),
+          );
+          if (diffDays === 1) {
+            currentStreakDays++;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const { total } = await this.historySetRepository
+      .createQueryBuilder('set')
+      .select('SUM(set.weight * set.reps)', 'total')
+      .where('set."userId" = :userId', { userId: user.id })
+      .getRawOne();
+
+    return {
+      monthSessionsCompleted,
+      monthActiveDays,
+      currentStreakDays,
+      totalVolumeKg: Number(total) || 0,
+    };
+  }
+
   private getMonthRange(year: number, month: number) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
