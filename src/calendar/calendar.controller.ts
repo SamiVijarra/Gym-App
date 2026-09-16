@@ -65,6 +65,11 @@ export class CalendarController {
     return this.calendarService.findExerciseHistory(exerciseId, user);
   }
 
+  @Get('stats')
+  getStats(@GetUser() user: User) {
+    return this.calendarService.getStatus(user);
+  }
+
   @Post('complete-session')
   completeSession(
     @Body() completeSessionDto: CompleteSessionDto,
