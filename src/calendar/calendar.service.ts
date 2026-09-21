@@ -271,20 +271,20 @@ export class CalendarService {
     };
   }
 
-  async setWeeklyGoal(dto: SetWeeklyGoalDto, user: User) {
-    const weekStart = this.getWeekStart(new Date(dto.weekStart));
+  async setWeeklyGoal(setWeeklyGoalDto: SetWeeklyGoalDto, user: User) {
+    const weekStart = this.getWeekStart(new Date(setWeeklyGoalDto.weekStart));
 
     let goal = await this.weeklyGoalRepository.findOne({
       where: { user: { id: user.id }, weekStart },
     });
 
     if (goal) {
-      goal.targetDays = dto.targetDays;
+      goal.targetDays = setWeeklyGoalDto.targetDays;
     } else {
       goal = this.weeklyGoalRepository.create({
         user,
         weekStart,
-        targetDays: dto.targetDays,
+        targetDays: setWeeklyGoalDto.targetDays,
       });
     }
 

@@ -19,6 +19,7 @@ import {
   CompleteSessionDto,
   GetSessionPrefillDto,
   PlanDayDto,
+  SetWeeklyGoalDto,
   UpdateHistoryNotesDto,
 } from './dto';
 
@@ -65,9 +66,17 @@ export class CalendarController {
     return this.calendarService.findExerciseHistory(exerciseId, user);
   }
 
-  @Get('stats')
-  getStats(@GetUser() user: User) {
-    return this.calendarService.getStatus(user);
+  @Get('weekly-goal')
+  getWeeklyGoal(@Query('weekStart') weekStart: string, @GetUser() user: User) {
+    return this.calendarService.getWeeklyGoal(weekStart, user);
+  }
+
+  @Post('weekly-goal')
+  setWeeklyGoal(
+    @Body() setWeeklyGoalDto: SetWeeklyGoalDto,
+    @GetUser() user: User,
+  ) {
+    return this.calendarService.setWeeklyGoal(setWeeklyGoalDto, user);
   }
 
   @Post('complete-session')
