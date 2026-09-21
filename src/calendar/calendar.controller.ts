@@ -66,6 +66,11 @@ export class CalendarController {
     return this.calendarService.findExerciseHistory(exerciseId, user);
   }
 
+  @Get('stats')
+  getStats(@GetUser() user: User) {
+    return this.calendarService.getStats(user);
+  }
+
   @Get('weekly-goal')
   getWeeklyGoal(@Query('weekStart') weekStart: string, @GetUser() user: User) {
     return this.calendarService.getWeeklyGoal(weekStart, user);
