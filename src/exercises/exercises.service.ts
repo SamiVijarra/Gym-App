@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -60,6 +61,7 @@ export class ExercisesService {
     return this.exerciseRepository.findOne({
       where: { id },
       relations: { images: true },
+      order: { images: { id: 'ASC' } },
     });
   }
 
@@ -77,7 +79,10 @@ export class ExercisesService {
     if (equipment) {
       query.andWhere('exercise.equipment = :equipment', { equipment });
     }
-    return query.getMany();
+    return query
+      .orderBy('exercise.name', 'ASC')
+      .addOrderBy('images.id', 'ASC')
+      .getMany();
   }
 
   async findOne(id: string) {
@@ -87,6 +92,7 @@ export class ExercisesService {
       select: {
         createdBy: { id: true },
       },
+      order: { images: { id: 'ASC' } },
     });
     if (!exercise)
       throw new NotFoundException(`Exercise with id ${id} not found`);
@@ -108,6 +114,16 @@ export class ExercisesService {
       );
     }
 
-    await this.exerciseRepository.remove(exercise);
+    try {
+      await this.exerciseRepository.remove(exercise);
+    } catch (error) {
+      // 23503 = foreign_key_violation
+      if ((error as { code?: string }).code === '23503') {
+        throw new ConflictException(
+          'This exercise is used in a routine or in your training history and cannot be deleted',
+        );
+      }
+      throw error;
+    }
   }
 }
