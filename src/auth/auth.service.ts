@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -60,6 +61,11 @@ export class AuthService {
   }
 
   private handleDBErrors(error: unknown): never {
+    // UsersService ya traduce los errores de Postgres a excepciones HTTP
+    // (ej. email duplicado → 400). Si llegan hasta acá, se dejan pasar tal cual;
+    // antes se convertían en un 500 "Please check server logs".
+    if (error instanceof HttpException) throw error;
+
     const pgError = error as PostgresError;
     if (pgError.code === '23505') {
       throw new BadRequestException(pgError.detail);

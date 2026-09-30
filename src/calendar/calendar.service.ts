@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Between, Repository } from 'typeorm';
+import { Between, IsNull, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { User } from 'src/users/entities/user.entity';
@@ -156,7 +156,9 @@ export class CalendarService {
             user: { id: user.id },
             date,
             status: CalendarStatus.PLANNED,
-            ...(routineDayId ? { routineDay: { id: routineDayId } } : {}),
+            // Sesión libre (sin rutina) solo puede cerrar una planificación libre;
+            // antes podía "consumir" una sesión planificada de otra rutina del mismo día.
+            routineDay: routineDayId ? { id: routineDayId } : IsNull(),
           },
         });
     if (calendarEntryId && !existingCalendarEntry) {
