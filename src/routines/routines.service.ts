@@ -225,6 +225,9 @@ export class RoutinesService {
     return this.routineDayRepository.findOne({
       where: { id },
       relations: { exercises: { exercise: { images: true }, sets: true } },
+      order: {
+        exercises: { order: 'ASC', sets: { order: 'ASC' } },
+      },
     });
   }
 }

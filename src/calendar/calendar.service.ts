@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Between, Repository } from 'typeorm';
+import { Between, IsNull, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { User } from 'src/users/entities/user.entity';
@@ -17,6 +17,12 @@ import {
   WeeklyGoal,
 } from './entities';
 import { RoutinesService } from 'src/routines/routines.service';
+import {
+  getMonthRange,
+  getWeekStart,
+  shiftIsoDate,
+  todayInAppTimeZone,
+} from 'src/common/utils/date.util';
 import { ExercisesService } from 'src/exercises/exercises.service';
 import {
   CompleteSessionDto,
@@ -44,7 +50,7 @@ export class CalendarService {
   ) {}
 
   findMyCalendar(user: User, year: number, month: number) {
-    const { startDate, endDate } = this.getMonthRange(year, month);
+    const { startDate, endDate } = getMonthRange(year, month);
 
     return this.calendarEntryRepository.find({
       where: {
@@ -59,7 +65,7 @@ export class CalendarService {
   async planDay(planDayDto: PlanDayDto, user: User) {
     const { date, routineDayId } = planDayDto;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayInAppTimeZone();
     if (date < today) {
       throw new BadRequestException('The day cannot be in the past');
     }
@@ -92,7 +98,10 @@ export class CalendarService {
     const lastHistoryEntry = await this.historyEntryRepository.findOne({
       where: { user: { id: user.id }, routineDay: { id: routineDayId } },
       relations: { exercises: { exercise: { images: true }, sets: true } },
-      order: { date: 'DESC' },
+      order: {
+        date: 'DESC',
+        exercises: { order: 'ASC', sets: { order: 'ASC' } },
+      },
     });
 
     const exercises = (routineDay?.exercises ?? []).map((routineExercise) => {
@@ -134,6 +143,29 @@ export class CalendarService {
       ? await this.routinesService.findDayOwnedByUser(routineDayId, user)
       : undefined;
 
+    const existingCalendarEntry = calendarEntryId
+      ? await this.calendarEntryRepository.findOne({
+          where: {
+            id: calendarEntryId,
+            user: { id: user.id },
+            status: CalendarStatus.PLANNED,
+          },
+        })
+      : await this.calendarEntryRepository.findOne({
+          where: {
+            user: { id: user.id },
+            date,
+            status: CalendarStatus.PLANNED,
+            // Sesión libre (sin rutina) solo puede cerrar una planificación libre;
+            // antes podía "consumir" una sesión planificada de otra rutina del mismo día.
+            routineDay: routineDayId ? { id: routineDayId } : IsNull(),
+          },
+        });
+    if (calendarEntryId && !existingCalendarEntry) {
+      throw new NotFoundException(
+        `Planned calendar entry with id ${calendarEntryId} not found`,
+      );
+    }
     const historyExercises = await Promise.all(
       exercises.map(async (exerciseDto, exerciseIndex) => {
         const exercise = await this.exercisesService.findOne(
@@ -177,27 +209,6 @@ export class CalendarService {
       );
     }
 
-    const existingCalendarEntry = calendarEntryId
-      ? await this.calendarEntryRepository.findOne({
-          where: {
-            id: calendarEntryId,
-            user: { id: user.id },
-            status: CalendarStatus.PLANNED,
-          },
-        })
-      : await this.calendarEntryRepository.findOne({
-          where: {
-            user: { id: user.id },
-            date,
-            status: CalendarStatus.PLANNED,
-            ...(routineDayId ? { routineDay: { id: routineDayId } } : {}),
-          },
-        });
-    if (calendarEntryId && !existingCalendarEntry) {
-      throw new NotFoundException(
-        `Planned calendar entry with id ${calendarEntryId} not found`,
-      );
-    }
     if (existingCalendarEntry) {
       existingCalendarEntry.status = CalendarStatus.DONE;
       existingCalendarEntry.historyEntry = savedHistoryEntry;
@@ -238,11 +249,8 @@ export class CalendarService {
   }
 
   async getStats(user: User) {
-    const now = new Date();
-    const { startDate, endDate } = this.getMonthRange(
-      now.getFullYear(),
-      now.getMonth() + 1,
-    );
+    const [year, month] = todayInAppTimeZone().split('-').map(Number);
+    const { startDate, endDate } = getMonthRange(year, month);
 
     const monthEntries = await this.calendarEntryRepository.find({
       where: {
@@ -272,7 +280,7 @@ export class CalendarService {
   }
 
   async setWeeklyGoal(setWeeklyGoalDto: SetWeeklyGoalDto, user: User) {
-    const weekStart = this.getWeekStart(new Date(setWeeklyGoalDto.weekStart));
+    const weekStart = getWeekStart(setWeeklyGoalDto.weekStart);
 
     let goal = await this.weeklyGoalRepository.findOne({
       where: { user: { id: user.id }, weekStart },
@@ -292,7 +300,7 @@ export class CalendarService {
   }
 
   async getWeeklyGoal(weekStartInput: string, user: User) {
-    const weekStart = this.getWeekStart(new Date(weekStartInput));
+    const weekStart = getWeekStart(weekStartInput);
 
     const goal = await this.weeklyGoalRepository.findOne({
       where: { user: { id: user.id }, weekStart },
@@ -308,7 +316,7 @@ export class CalendarService {
   }
 
   private async calculateWeeklyStreak(user: User): Promise<number> {
-    const currentWeekStart = this.getWeekStart(new Date());
+    const currentWeekStart = getWeekStart(todayInAppTimeZone());
     let streak = 0;
     let cursor = currentWeekStart;
     let isCurrentWeek = true;
@@ -320,7 +328,7 @@ export class CalendarService {
 
       if (!goal) {
         if (isCurrentWeek) {
-          cursor = this.shiftWeek(cursor, -7);
+          cursor = shiftIsoDate(cursor, -7);
           isCurrentWeek = false;
           continue;
         }
@@ -330,14 +338,14 @@ export class CalendarService {
       const doneDays = await this.countDoneDaysInWeek(user, cursor);
 
       if (isCurrentWeek && doneDays < goal.targetDays) {
-        cursor = this.shiftWeek(cursor, -7);
+        cursor = shiftIsoDate(cursor, -7);
         isCurrentWeek = false;
         continue;
       }
 
       if (doneDays >= goal.targetDays) {
         streak++;
-        cursor = this.shiftWeek(cursor, -7);
+        cursor = shiftIsoDate(cursor, -7);
         isCurrentWeek = false;
       } else {
         break;
@@ -351,7 +359,7 @@ export class CalendarService {
     user: User,
     weekStart: string,
   ): Promise<number> {
-    const weekEnd = this.shiftWeek(weekStart, 6);
+    const weekEnd = shiftIsoDate(weekStart, 6);
     const entries = await this.calendarEntryRepository.find({
       where: {
         user: { id: user.id },
@@ -360,29 +368,6 @@ export class CalendarService {
       },
     });
     return new Set(entries.map((e) => e.date)).size;
-  }
-
-  private getWeekStart(date: Date): string {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    const day = d.getDay(); // 0 = domingo
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    return d.toISOString().slice(0, 10);
-  }
-
-  private shiftWeek(weekStart: string, days: number): string {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
-  }
-
-  private getMonthRange(year: number, month: number) {
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-    return { startDate, endDate };
   }
 
   async findExerciseHistory(exerciseId: string, user: User) {

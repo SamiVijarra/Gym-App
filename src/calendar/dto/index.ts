@@ -3,3 +3,4 @@ export * from './get-session-prefill.dto';
 export * from './plan-day.dto';
 export * from './update-history-notes.dto';
 export * from './set-weekly-goal.dto';
+export * from './get-weekly-goal.dto';

@@ -18,6 +18,7 @@ import { User } from 'src/users/entities/user.entity';
 import {
   CompleteSessionDto,
   GetSessionPrefillDto,
+  GetWeeklyGoalDto,
   PlanDayDto,
   SetWeeklyGoalDto,
   UpdateHistoryNotesDto,
@@ -72,8 +73,11 @@ export class CalendarController {
   }
 
   @Get('weekly-goal')
-  getWeeklyGoal(@Query('weekStart') weekStart: string, @GetUser() user: User) {
-    return this.calendarService.getWeeklyGoal(weekStart, user);
+  getWeeklyGoal(
+    @Query() getWeeklyGoalDto: GetWeeklyGoalDto,
+    @GetUser() user: User,
+  ) {
+    return this.calendarService.getWeeklyGoal(getWeeklyGoalDto.weekStart, user);
   }
 
   @Post('weekly-goal')
