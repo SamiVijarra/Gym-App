@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Between, IsNull, Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { User } from 'src/users/entities/user.entity';
@@ -14,6 +14,7 @@ import {
   HistoryEntry,
   HistoryExercise,
   HistorySet,
+  PlannedExercise,
   WeeklyGoal,
 } from './entities';
 import { RoutinesService } from 'src/routines/routines.service';
@@ -45,6 +46,8 @@ export class CalendarService {
     private readonly historySetRepository: Repository<HistorySet>,
     @InjectRepository(WeeklyGoal)
     private readonly weeklyGoalRepository: Repository<WeeklyGoal>,
+    @InjectRepository(PlannedExercise)
+    private readonly plannedExerciseRepository: Repository<PlannedExercise>,
     private readonly routinesService: RoutinesService,
     private readonly exercisesService: ExercisesService,
   ) {}
@@ -57,22 +60,46 @@ export class CalendarService {
         user: { id: user.id },
         date: Between(startDate, endDate),
       },
-      relations: { routineDay: true, historyEntry: true },
-      order: { date: 'ASC' },
+      relations: {
+        routineDay: true,
+        historyEntry: true,
+        plannedExercises: { exercise: true },
+      },
+      order: { date: 'ASC', plannedExercises: { order: 'ASC' } },
     });
   }
 
   async planDay(planDayDto: PlanDayDto, user: User) {
-    const { date, routineDayId } = planDayDto;
+    const { date, routineDayId, exerciseIds = [] } = planDayDto;
 
     const today = todayInAppTimeZone();
     if (date < today) {
       throw new BadRequestException('The day cannot be in the past');
     }
 
-    const routineDay = await this.routinesService.findDayOwnedByUser(
-      routineDayId,
-      user,
+    if (routineDayId && exerciseIds.length > 0) {
+      throw new BadRequestException(
+        'Choose either a routine day or a list of exercises, not both',
+      );
+    }
+    if (!routineDayId && exerciseIds.length === 0) {
+      throw new BadRequestException(
+        'Choose a routine day or at least one exercise to plan',
+      );
+    }
+
+    const routineDay = routineDayId
+      ? await this.routinesService.findDayOwnedByUser(routineDayId, user)
+      : undefined;
+
+    const plannedExercises = await Promise.all(
+      exerciseIds.map(async (exerciseId, index) => {
+        const exercise = await this.exercisesService.findOne(exerciseId);
+        return this.plannedExerciseRepository.create({
+          exercise,
+          order: index + 1,
+        });
+      }),
     );
 
     const calendarEntry = this.calendarEntryRepository.create({
@@ -80,9 +107,55 @@ export class CalendarService {
       date,
       status: CalendarStatus.PLANNED,
       routineDay,
+      plannedExercises,
     });
 
     return this.calendarEntryRepository.save(calendarEntry);
+  }
+
+  async getPlannedEntryPrefill(id: string, user: User) {
+    const entry = await this.calendarEntryRepository.findOne({
+      where: { id },
+      relations: {
+        user: true,
+        routineDay: true,
+        plannedExercises: { exercise: { images: true } },
+      },
+      order: { plannedExercises: { order: 'ASC' } },
+    });
+
+    if (!entry) {
+      throw new NotFoundException(`Calendar entry with id ${id} not found`);
+    }
+    if (entry.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this calendar entry',
+      );
+    }
+    if (entry.status !== CalendarStatus.PLANNED) {
+      throw new BadRequestException('Only planned entries can be completed');
+    }
+    if (entry.routineDay) {
+      throw new BadRequestException(
+        'This planned session uses a routine day; use session-prefill instead',
+      );
+    }
+
+    return {
+      routineDayId: null,
+      hasHistory: false,
+      exercises: (entry.plannedExercises ?? []).map((planned) => ({
+        routineExerciseId: null,
+        exercise: {
+          ...planned.exercise,
+          images: [...(planned.exercise.images ?? [])].sort(
+            (a, b) => a.id - b.id,
+          ),
+        },
+        notes: undefined,
+        suggestedSets: [],
+      })),
+    };
   }
 
   async getSessionPrefill(
@@ -143,22 +216,25 @@ export class CalendarService {
       ? await this.routinesService.findDayOwnedByUser(routineDayId, user)
       : undefined;
 
-    const existingCalendarEntry = calendarEntryId
-      ? await this.calendarEntryRepository.findOne({
-          where: {
-            id: calendarEntryId,
-            user: { id: user.id },
-            status: CalendarStatus.PLANNED,
-          },
-        })
-      : await this.calendarEntryRepository.findOne({
-          where: {
-            user: { id: user.id },
-            date,
-            status: CalendarStatus.PLANNED,
-            routineDay: routineDayId ? { id: routineDayId } : IsNull(),
-          },
-        });
+    let existingCalendarEntry: CalendarEntry | null = null;
+    if (calendarEntryId) {
+      existingCalendarEntry = await this.calendarEntryRepository.findOne({
+        where: {
+          id: calendarEntryId,
+          user: { id: user.id },
+          status: CalendarStatus.PLANNED,
+        },
+      });
+    } else if (routineDayId) {
+      existingCalendarEntry = await this.calendarEntryRepository.findOne({
+        where: {
+          user: { id: user.id },
+          date,
+          status: CalendarStatus.PLANNED,
+          routineDay: { id: routineDayId },
+        },
+      });
+    }
     if (calendarEntryId && !existingCalendarEntry) {
       throw new NotFoundException(
         `Planned calendar entry with id ${calendarEntryId} not found`,
@@ -208,6 +284,9 @@ export class CalendarService {
     }
 
     if (existingCalendarEntry) {
+      await this.plannedExerciseRepository.delete({
+        calendarEntry: { id: existingCalendarEntry.id },
+      });
       existingCalendarEntry.status = CalendarStatus.DONE;
       existingCalendarEntry.historyEntry = savedHistoryEntry;
       return this.calendarEntryRepository.save(existingCalendarEntry);
