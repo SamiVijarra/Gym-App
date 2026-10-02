@@ -156,8 +156,6 @@ export class CalendarService {
             user: { id: user.id },
             date,
             status: CalendarStatus.PLANNED,
-            // Sesión libre (sin rutina) solo puede cerrar una planificación libre;
-            // antes podía "consumir" una sesión planificada de otra rutina del mismo día.
             routineDay: routineDayId ? { id: routineDayId } : IsNull(),
           },
         });
