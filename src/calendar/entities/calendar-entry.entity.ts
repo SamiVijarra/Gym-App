@@ -1,8 +1,15 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 import { RoutineDay } from 'src/routines/entities';
 import { User } from 'src/users/entities/user.entity';
 import { HistoryEntry } from './history-entry.entity';
+import { PlannedExercise } from './planned-exercise.entity';
 
 export enum CalendarStatus {
   EMPTY = 'empty',
@@ -39,4 +46,9 @@ export class CalendarEntry {
     onDelete: 'SET NULL',
   })
   historyEntry?: HistoryEntry;
+
+  @OneToMany(() => PlannedExercise, (planned) => planned.calendarEntry, {
+    cascade: true,
+  })
+  plannedExercises?: PlannedExercise[];
 }
