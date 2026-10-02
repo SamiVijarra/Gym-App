@@ -51,6 +51,14 @@ export class CalendarController {
     return this.calendarService.getSessionPrefill(getSessionPrefillDto, user);
   }
 
+  @Get('planned/:id/prefill')
+  getPlannedPrefill(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: User,
+  ) {
+    return this.calendarService.getPlannedEntryPrefill(id, user);
+  }
+
   @Get('history/:id')
   findHistoryEntry(
     @Param('id', ParseUUIDPipe) id: string,
