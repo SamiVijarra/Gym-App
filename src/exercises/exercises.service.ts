@@ -11,6 +11,7 @@ import { CreateExerciseDto, UpdateExerciseDto } from './dto';
 import { ExerciseImage, Exercise } from './entities';
 import { User } from 'src/users/entities/user.entity';
 import { FindExercisesDto } from './dto/find.exercise.dto';
+import { MUSCLE_GROUPS } from 'src/common/muscle-groups';
 
 @Injectable()
 export class ExercisesService {
@@ -66,7 +67,7 @@ export class ExercisesService {
   }
 
   findAll(findExercisesDto: FindExercisesDto) {
-    const { name, muscle, equipment } = findExercisesDto;
+    const { name, muscle, muscleGroup, equipment } = findExercisesDto;
     const query = this.exerciseRepository
       .createQueryBuilder('exercise')
       .leftJoinAndSelect('exercise.images', 'images');
@@ -75,6 +76,12 @@ export class ExercisesService {
     }
     if (muscle) {
       query.andWhere(':muscle = ANY(exercise.primaryMuscles)', { muscle });
+    }
+    if (muscleGroup) {
+      query.andWhere(
+        'LOWER(TRIM(("exercise"."primaryMuscles")[1])) IN (:...groupMuscles)',
+        { groupMuscles: MUSCLE_GROUPS[muscleGroup] },
+      );
     }
     if (equipment) {
       query.andWhere('exercise.equipment = :equipment', { equipment });
