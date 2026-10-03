@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   IsArray,
   IsDateString,
   IsInt,
@@ -7,18 +8,22 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
 export class CompleteSessionSetDto {
   @IsNumber()
+  @Min(0)
   weight!: number;
 
   @IsInt()
+  @Min(1)
   reps!: number;
 
   @IsOptional()
   @IsInt()
+  @Min(0)
   restSeconds?: number;
 
   @IsOptional()
@@ -35,6 +40,7 @@ export class CompleteSessionExerciseDto {
   notes?: string;
 
   @IsArray()
+  @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => CompleteSessionSetDto)
   sets!: CompleteSessionSetDto[];
@@ -53,6 +59,7 @@ export class CompleteSessionDto {
   calendarEntryId?: string;
 
   @IsArray()
+  @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => CompleteSessionExerciseDto)
   exercises!: CompleteSessionExerciseDto[];
