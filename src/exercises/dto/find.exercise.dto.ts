@@ -1,4 +1,5 @@
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { MUSCLE_GROUP_KEYS, type MuscleGroup } from 'src/common/muscle-groups';
 
 export class FindExercisesDto {
   @IsOptional()
@@ -10,6 +11,10 @@ export class FindExercisesDto {
   @IsString()
   @MinLength(3)
   muscle?: string;
+
+  @IsOptional()
+  @IsIn(MUSCLE_GROUP_KEYS)
+  muscleGroup?: MuscleGroup;
 
   @IsOptional()
   @IsString()
