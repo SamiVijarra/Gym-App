@@ -25,6 +25,7 @@ import {
   todayInAppTimeZone,
 } from 'src/common/utils/date.util';
 import { ExercisesService } from 'src/exercises/exercises.service';
+import { getMuscleGroups } from 'src/common/muscle-groups';
 import {
   CompleteSessionDto,
   GetSessionPrefillDto,
@@ -52,21 +53,42 @@ export class CalendarService {
     private readonly exercisesService: ExercisesService,
   ) {}
 
-  findMyCalendar(user: User, year: number, month: number) {
+  async findMyCalendar(user: User, year: number, month: number) {
     const { startDate, endDate } = getMonthRange(year, month);
 
-    return this.calendarEntryRepository.find({
+    const entries = await this.calendarEntryRepository.find({
       where: {
         user: { id: user.id },
         date: Between(startDate, endDate),
       },
       relations: {
-        routineDay: true,
-        historyEntry: true,
+        routineDay: { exercises: { exercise: true } },
+        historyEntry: { exercises: { exercise: true } },
         plannedExercises: { exercise: true },
       },
       order: { date: 'ASC', plannedExercises: { order: 'ASC' } },
     });
+
+    return entries.map((entry) => this.toCalendarEntryView(entry));
+  }
+
+  private toCalendarEntryView(entry: CalendarEntry) {
+    const exercises = entry.historyEntry
+      ? (entry.historyEntry.exercises ?? []).map((item) => item.exercise)
+      : entry.plannedExercises?.length
+        ? entry.plannedExercises.map((item) => item.exercise)
+        : (entry.routineDay?.exercises ?? []).map((item) => item.exercise);
+
+    return {
+      ...entry,
+      routineDay: entry.routineDay
+        ? omitKey(entry.routineDay, 'exercises')
+        : undefined,
+      historyEntry: entry.historyEntry
+        ? omitKey(entry.historyEntry, 'exercises')
+        : undefined,
+      muscleGroups: getMuscleGroups(exercises),
+    };
   }
 
   async planDay(planDayDto: PlanDayDto, user: User) {
@@ -592,4 +614,13 @@ export class CalendarService {
       }
     }
   }
+}
+
+function omitKey<T extends object, K extends keyof T>(
+  value: T,
+  key: K,
+): Omit<T, K> {
+  const copy = { ...value };
+  delete (copy as Partial<T>)[key];
+  return copy;
 }
