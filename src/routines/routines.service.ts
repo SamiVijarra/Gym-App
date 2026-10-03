@@ -69,11 +69,15 @@ export class RoutinesService {
     user: User,
   ) {
     await this.findDayAndVerifyOwner(id, user);
-    const updated = await this.routineDayRepository.preload({
-      id,
-      ...updateRoutineDayDto,
-    });
-    return this.routineDayRepository.save(updated!);
+    try {
+      const updated = await this.routineDayRepository.preload({
+        id,
+        ...updateRoutineDayDto,
+      });
+      return await this.routineDayRepository.save(updated!);
+    } catch (error) {
+      this.handleDBErrors(error);
+    }
   }
 
   async removeDay(id: string, user: User) {
@@ -110,15 +114,17 @@ export class RoutinesService {
     const exercise = await this.exercisesService.findOne(
       createRoutineExerciseDto.exerciseId,
     );
-    const existingCount = await this.routineExerciseRepository.count({
+
+    const lastExercise = await this.routineExerciseRepository.findOne({
       where: { routineDay: { id: dayId } },
+      order: { order: 'DESC' },
     });
     const routineExercise = this.routineExerciseRepository.create({
       routineDay: day,
       exercise,
       user,
       notes: createRoutineExerciseDto.notes,
-      order: existingCount + 1,
+      order: (lastExercise?.order ?? 0) + 1,
     });
     return this.routineExerciseRepository.save(routineExercise);
   }
@@ -169,14 +175,15 @@ export class RoutinesService {
       routineExerciseId,
       user,
     );
-    const existingCount = await this.setRepository.count({
+    const lastSet = await this.setRepository.findOne({
       where: { routineExercise: { id: routineExerciseId } },
+      order: { order: 'DESC' },
     });
     const set = this.setRepository.create({
       ...createSetDto,
       routineExercise,
       user,
-      order: existingCount + 1,
+      order: (lastSet?.order ?? 0) + 1,
     });
     return this.setRepository.save(set);
   }
