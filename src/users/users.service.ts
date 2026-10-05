@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  UnauthorizedException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -50,7 +51,7 @@ export class UsersService {
     } catch (error) {
       this.handleDBErrors(error);
     }
-    if (!user) throw new BadRequestException('Credentials are not valid');
+    if (!user) throw new UnauthorizedException('Credentials are not valid');
     return user;
   }
 
