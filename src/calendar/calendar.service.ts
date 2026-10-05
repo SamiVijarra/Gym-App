@@ -83,10 +83,10 @@ export class CalendarService {
       ...entry,
       routineDay: entry.routineDay
         ? omitKey(entry.routineDay, 'exercises')
-        : undefined,
+        : null,
       historyEntry: entry.historyEntry
         ? omitKey(entry.historyEntry, 'exercises')
-        : undefined,
+        : null,
       muscleGroups: getMuscleGroups(exercises),
     };
   }
