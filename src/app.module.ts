@@ -22,7 +22,7 @@ import { CalendarModule } from './calendar/calendar.module';
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: true, // Set to false in production
+      synchronize: process.env.NODE_ENV !== 'production',
     }),
     UsersModule,
     AuthModule,
