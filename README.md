@@ -2,7 +2,7 @@
 
 REST API for a workout tracker: browse an exercise catalog, build routines, plan and log training sessions, and follow your progress on a calendar with weekly goals and a streak.
 
-Frontend repository: `https://github.com/SamiVijarra/gym-app-frontend`
+Frontend repository: [gym-app frontend](https://github.com/SamiVijarra/gym-app-frontend)
 
 ## Features
 
