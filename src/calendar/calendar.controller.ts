@@ -80,6 +80,11 @@ export class CalendarController {
     return this.calendarService.getStats(user);
   }
 
+  @Get('stats/muscle-groups')
+  getMuscleGroupStats(@GetUser() user: User) {
+    return this.calendarService.getMuscleGroupStats(user);
+  }
+
   @Get('weekly-goal')
   getWeeklyGoal(
     @Query() getWeeklyGoalDto: GetWeeklyGoalDto,
