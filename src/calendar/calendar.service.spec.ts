@@ -59,8 +59,21 @@ function buildService() {
     create: jest.fn((value: object) => value),
     save: jest.fn((value: object) => Promise.resolve(value)),
   };
+  const muscleRows: { entryId: string; muscle: string; volume: string }[] = [];
+  const muscleQueryBuilder = {
+    innerJoin: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn(() => Promise.resolve(muscleRows)),
+  };
   const historyExerciseRepository = {
     create: jest.fn((value: object) => value),
+    createQueryBuilder: jest.fn(() => muscleQueryBuilder),
   };
   const historySetRepository = {
     create: jest.fn((value: object) => value),
@@ -83,6 +96,8 @@ function buildService() {
   return {
     goals,
     doneEntries,
+    muscleRows,
+    muscleQueryBuilder,
     calendarEntryRepository,
     historyEntryRepository,
     routinesService,
@@ -209,6 +224,85 @@ describe('CalendarService', () => {
       const ctx = buildService();
       const service = await ctx.create();
       expect((await service.getStats(user)).currentStreakWeeks).toBe(0);
+    });
+  });
+
+  describe('getMuscleGroupStats', () => {
+    it('returns every group with zeros when there are no sessions this month', async () => {
+      const ctx = buildService();
+      const service = await ctx.create();
+
+      const stats = await service.getMuscleGroupStats(user);
+
+      expect(stats.month).toBe('2026-10');
+      expect(stats.groups.map((g) => g.group)).toEqual([
+        'chest',
+        'back',
+        'shoulders',
+        'arms',
+        'legs',
+        'glutes',
+        'core',
+      ]);
+      expect(
+        stats.groups.every((g) => g.sessions === 0 && g.volumeKg === 0),
+      ).toBe(true);
+    });
+
+    it('counts a session once per group and adds up the volume of its muscles', async () => {
+      const ctx = buildService();
+      ctx.muscleRows.push(
+        { entryId: 'e1', muscle: 'lats', volume: '1000.50' },
+        { entryId: 'e1', muscle: 'traps', volume: '200' },
+        { entryId: 'e2', muscle: 'lats', volume: '300' },
+        { entryId: 'e2', muscle: 'chest', volume: '500' },
+      );
+      const service = await ctx.create();
+
+      const stats = await service.getMuscleGroupStats(user);
+      const byGroup = Object.fromEntries(stats.groups.map((g) => [g.group, g]));
+
+      expect(byGroup.back).toEqual({
+        group: 'back',
+        sessions: 2,
+        volumeKg: 1500.5,
+      });
+      expect(byGroup.chest).toEqual({
+        group: 'chest',
+        sessions: 1,
+        volumeKg: 500,
+      });
+      expect(byGroup.legs.sessions).toBe(0);
+    });
+
+    it('ignores muscles that do not belong to any group', async () => {
+      const ctx = buildService();
+      ctx.muscleRows.push(
+        { entryId: 'e1', muscle: 'unknown muscle', volume: '999' },
+        { entryId: 'e1', muscle: 'glutes', volume: '400' },
+      );
+      const service = await ctx.create();
+
+      const stats = await service.getMuscleGroupStats(user);
+      const total = stats.groups.reduce((sum, g) => sum + g.volumeKg, 0);
+
+      expect(total).toBe(400);
+    });
+
+    it('limits the query to the current month in the app time zone and to the user', async () => {
+      const ctx = buildService();
+      const service = await ctx.create();
+
+      await service.getMuscleGroupStats(user);
+
+      expect(ctx.muscleQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('BETWEEN'),
+        { startDate: '2026-10-01', endDate: '2026-10-31' },
+      );
+      expect(ctx.muscleQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining('userId'),
+        { userId: 'user-1' },
+      );
     });
   });
 
