@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { User } from 'src/users/entities/user.entity';
@@ -167,10 +167,16 @@ export class CalendarService {
       );
     }
 
+    const plannedExercises = entry.plannedExercises ?? [];
+    const lastSets = await this.findLastSetsByExercise(
+      user,
+      plannedExercises.map((planned) => planned.exercise.id),
+    );
+
     return {
       routineDayId: null,
-      hasHistory: false,
-      exercises: (entry.plannedExercises ?? []).map((planned) => ({
+      hasHistory: lastSets.size > 0,
+      exercises: plannedExercises.map((planned) => ({
         routineExerciseId: null,
         exercise: {
           ...planned.exercise,
@@ -179,9 +185,58 @@ export class CalendarService {
           ),
         },
         notes: undefined,
-        suggestedSets: [],
+        suggestedSets: lastSets.get(planned.exercise.id) ?? [],
       })),
     };
+  }
+
+  async getLastSets(exerciseId: string, user: User) {
+    const lastSets = await this.findLastSetsByExercise(user, [exerciseId]);
+    return { exerciseId, sets: lastSets.get(exerciseId) ?? [] };
+  }
+
+  private async findLastSetsByExercise(user: User, exerciseIds: string[]) {
+    const lastSets = new Map<
+      string,
+      {
+        order: number;
+        weight: number;
+        reps: number;
+        restSeconds?: number;
+      }[]
+    >();
+    if (exerciseIds.length === 0) return lastSets;
+
+    const latest = await this.historyExerciseRepository
+      .createQueryBuilder('he')
+      .innerJoin('he.historyEntry', 'entry')
+      .distinctOn(['he."exerciseId"'])
+      .select('he.id', 'id')
+      .where('he."userId" = :userId', { userId: user.id })
+      .andWhere('he."exerciseId" IN (:...exerciseIds)', { exerciseIds })
+      .orderBy('he."exerciseId"')
+      .addOrderBy('entry.date', 'DESC')
+      .getRawMany<{ id: string }>();
+    if (latest.length === 0) return lastSets;
+
+    const historyExercises = await this.historyExerciseRepository.find({
+      where: { id: In(latest.map((row) => row.id)) },
+      relations: { exercise: true, sets: true },
+      order: { sets: { order: 'ASC' } },
+    });
+
+    for (const historyExercise of historyExercises) {
+      lastSets.set(
+        historyExercise.exercise.id,
+        (historyExercise.sets ?? []).map((set) => ({
+          order: set.order,
+          weight: set.weight,
+          reps: set.reps,
+          restSeconds: set.restSeconds,
+        })),
+      );
+    }
+    return lastSets;
   }
 
   async getSessionPrefill(
