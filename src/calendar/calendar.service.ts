@@ -25,7 +25,11 @@ import {
   todayInAppTimeZone,
 } from 'src/common/utils/date.util';
 import { ExercisesService } from 'src/exercises/exercises.service';
-import { getMuscleGroups } from 'src/common/muscle-groups';
+import {
+  getMuscleGroup,
+  getMuscleGroups,
+  MUSCLE_GROUP_KEYS,
+} from 'src/common/muscle-groups';
 import {
   CompleteSessionDto,
   GetSessionPrefillDto,
@@ -375,6 +379,55 @@ export class CalendarService {
       monthActiveDays,
       currentStreakWeeks,
       totalVolumeKg: Number(total) || 0,
+    };
+  }
+
+  async getMuscleGroupStats(user: User) {
+    const today = todayInAppTimeZone();
+    const [year, month] = today.split('-').map(Number);
+    const { startDate, endDate } = getMonthRange(year, month);
+
+    const rows = await this.historyExerciseRepository
+      .createQueryBuilder('he')
+      .innerJoin('he.historyEntry', 'entry')
+      .innerJoin('he.exercise', 'exercise')
+      .leftJoin('he.sets', 'hs')
+      .select('entry.id', 'entryId')
+      .addSelect('LOWER(TRIM(("exercise"."primaryMuscles")[1]))', 'muscle')
+      .addSelect('COALESCE(SUM(hs.weight * hs.reps), 0)', 'volume')
+      .where('he."userId" = :userId', { userId: user.id })
+      .andWhere('entry.date BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .groupBy('entry.id')
+      .addGroupBy('LOWER(TRIM(("exercise"."primaryMuscles")[1]))')
+      .getRawMany<{ entryId: string; muscle: string; volume: string }>();
+
+    const totals = new Map(
+      MUSCLE_GROUP_KEYS.map((group) => [
+        group,
+        { sessions: new Set<string>(), volumeKg: 0 },
+      ]),
+    );
+    for (const row of rows) {
+      const group = getMuscleGroup([row.muscle]);
+      if (!group) continue;
+      const total = totals.get(group)!;
+      total.sessions.add(row.entryId);
+      total.volumeKg += Number(row.volume) || 0;
+    }
+
+    return {
+      month: today.slice(0, 7),
+      groups: MUSCLE_GROUP_KEYS.map((group) => {
+        const total = totals.get(group)!;
+        return {
+          group,
+          sessions: total.sessions.size,
+          volumeKg: Math.round(total.volumeKg * 100) / 100,
+        };
+      }),
     };
   }
 
