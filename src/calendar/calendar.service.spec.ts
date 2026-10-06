@@ -6,6 +6,7 @@ import { FindOperator } from 'typeorm';
 import { CalendarService } from './calendar.service';
 import {
   CalendarEntry,
+  CalendarStatus,
   HistoryEntry,
   HistoryExercise,
   HistorySet,
@@ -71,9 +72,22 @@ function buildService() {
     addGroupBy: jest.fn().mockReturnThis(),
     getRawMany: jest.fn(() => Promise.resolve(muscleRows)),
   };
+  const lastSetsRows: { id: string }[] = [];
+  const lastSetsQueryBuilder = {
+    innerJoin: jest.fn().mockReturnThis(),
+    distinctOn: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn(() => Promise.resolve(lastSetsRows)),
+  };
+  const lastHistoryExercises: object[] = [];
   const historyExerciseRepository = {
     create: jest.fn((value: object) => value),
     createQueryBuilder: jest.fn(() => muscleQueryBuilder),
+    find: jest.fn(() => Promise.resolve(lastHistoryExercises)),
   };
   const historySetRepository = {
     create: jest.fn((value: object) => value),
@@ -98,6 +112,10 @@ function buildService() {
     doneEntries,
     muscleRows,
     muscleQueryBuilder,
+    lastSetsRows,
+    lastSetsQueryBuilder,
+    lastHistoryExercises,
+    historyExerciseRepository,
     calendarEntryRepository,
     historyEntryRepository,
     routinesService,
@@ -303,6 +321,134 @@ describe('CalendarService', () => {
         expect.stringContaining('userId'),
         { userId: 'user-1' },
       );
+    });
+  });
+
+  describe('last sets suggestions', () => {
+    const plannedEntry = (exerciseIds: string[]) => ({
+      id: 'entry-1',
+      status: CalendarStatus.PLANNED,
+      user: { id: user.id },
+      routineDay: null,
+      plannedExercises: exerciseIds.map((id, index) => ({
+        order: index + 1,
+        exercise: { id, images: [] },
+      })),
+    });
+
+    const lastSession = (exerciseId: string, weight: number, reps: number) => ({
+      exercise: { id: exerciseId },
+      sets: [
+        { order: 1, weight, reps, restSeconds: 90 },
+        { order: 2, weight, reps: reps - 2, restSeconds: null },
+      ],
+    });
+
+    it('fills a planned free session with the sets of the last time each exercise was done', async () => {
+      const ctx = buildService();
+      ctx.calendarEntryRepository.findOne.mockResolvedValue(
+        plannedEntry(['ex-a', 'ex-b']),
+      );
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      ctx.lastSetsRows.push({ id: 'he-1' }, { id: 'he-2' });
+      ctx.lastHistoryExercises.push(
+        lastSession('ex-b', 50, 10),
+        lastSession('ex-a', 80, 5),
+      );
+      const service = await ctx.create();
+
+      const prefill = await service.getPlannedEntryPrefill('entry-1', user);
+
+      expect(prefill.hasHistory).toBe(true);
+      expect(prefill.exercises.map((e) => e.exercise.id)).toEqual([
+        'ex-a',
+        'ex-b',
+      ]);
+      expect(prefill.exercises[0].suggestedSets).toEqual([
+        { order: 1, weight: 80, reps: 5, restSeconds: 90 },
+        { order: 2, weight: 80, reps: 3, restSeconds: null },
+      ]);
+      expect(prefill.exercises[1].suggestedSets[0].weight).toBe(50);
+    });
+
+    it('leaves the sets empty for an exercise that was never done', async () => {
+      const ctx = buildService();
+      ctx.calendarEntryRepository.findOne.mockResolvedValue(
+        plannedEntry(['ex-a', 'ex-new']),
+      );
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      ctx.lastSetsRows.push({ id: 'he-1' });
+      ctx.lastHistoryExercises.push(lastSession('ex-a', 80, 5));
+      const service = await ctx.create();
+
+      const prefill = await service.getPlannedEntryPrefill('entry-1', user);
+
+      expect(prefill.exercises[0].suggestedSets).toHaveLength(2);
+      expect(prefill.exercises[1].suggestedSets).toEqual([]);
+    });
+
+    it('reports no history and skips the sets query when nothing was ever logged', async () => {
+      const ctx = buildService();
+      ctx.calendarEntryRepository.findOne.mockResolvedValue(
+        plannedEntry(['ex-a']),
+      );
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      const service = await ctx.create();
+
+      const prefill = await service.getPlannedEntryPrefill('entry-1', user);
+
+      expect(prefill.hasHistory).toBe(false);
+      expect(prefill.exercises[0].suggestedSets).toEqual([]);
+      expect(ctx.historyExerciseRepository.find).not.toHaveBeenCalled();
+    });
+
+    it('looks up only the current user and the planned exercises', async () => {
+      const ctx = buildService();
+      ctx.calendarEntryRepository.findOne.mockResolvedValue(
+        plannedEntry(['ex-a', 'ex-b']),
+      );
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      const service = await ctx.create();
+
+      await service.getPlannedEntryPrefill('entry-1', user);
+
+      expect(ctx.lastSetsQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining('userId'),
+        { userId: 'user-1' },
+      );
+      expect(ctx.lastSetsQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('exerciseId'),
+        { exerciseIds: ['ex-a', 'ex-b'] },
+      );
+    });
+
+    it('returns the last sets of a single exercise, or an empty list', async () => {
+      const ctx = buildService();
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      ctx.lastSetsRows.push({ id: 'he-1' });
+      ctx.lastHistoryExercises.push(lastSession('ex-a', 80, 5));
+      const service = await ctx.create();
+
+      const found = await service.getLastSets('ex-a', user);
+      expect(found.exerciseId).toBe('ex-a');
+      expect(found.sets).toHaveLength(2);
+
+      ctx.lastSetsRows.length = 0;
+      ctx.historyExerciseRepository.createQueryBuilder.mockReturnValueOnce(
+        ctx.lastSetsQueryBuilder as never,
+      );
+      const empty = await service.getLastSets('ex-z', user);
+      expect(empty.sets).toEqual([]);
     });
   });
 

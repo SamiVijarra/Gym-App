@@ -67,6 +67,14 @@ export class CalendarController {
     return this.calendarService.findHistoryEntryOwnedByUser(id, user);
   }
 
+  @Get('history/exercise/:exerciseId/last')
+  getLastSets(
+    @Param('exerciseId', ParseUUIDPipe) exerciseId: string,
+    @GetUser() user: User,
+  ) {
+    return this.calendarService.getLastSets(exerciseId, user);
+  }
+
   @Get('history/exercise/:exerciseId')
   findExerciseHistory(
     @Param('exerciseId', ParseUUIDPipe) exerciseId: string,
