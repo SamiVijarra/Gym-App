@@ -1,4 +1,12 @@
-import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
+import { EXERCISE_MUSCLES } from 'src/common/muscle-groups';
 
 export class CreateExerciseDto {
   @IsString()
@@ -6,7 +14,11 @@ export class CreateExerciseDto {
   name!: string;
 
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMinSize(1)
+  @IsIn(EXERCISE_MUSCLES, {
+    each: true,
+    message: `each value in primaryMuscles must be one of: ${EXERCISE_MUSCLES.join(', ')}`,
+  })
   primaryMuscles!: string[];
 
   @IsString()
