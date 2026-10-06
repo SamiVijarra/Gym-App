@@ -45,3 +45,25 @@ export function getMuscleGroups(
   }
   return MUSCLE_GROUP_KEYS.filter((group) => found.has(group));
 }
+
+export const EXERCISE_MUSCLES = [
+  'abdominals',
+  'abductors',
+  'adductors',
+  'biceps',
+  'calves',
+  'chest',
+  'forearms',
+  'glutes',
+  'hamstrings',
+  'lats',
+  'lower back',
+  'middle back',
+  'neck',
+  'quadriceps',
+  'shoulders',
+  'traps',
+  'triceps',
+] as const;
+
+export type ExerciseMuscle = (typeof EXERCISE_MUSCLES)[number];
