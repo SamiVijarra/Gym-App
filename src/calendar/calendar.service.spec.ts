@@ -57,6 +57,7 @@ function buildService() {
   };
 
   const historyEntryRepository = {
+    count: jest.fn(() => Promise.resolve(7)),
     create: jest.fn((value: object) => value),
     save: jest.fn((value: object) => Promise.resolve(value)),
   };
@@ -238,10 +239,98 @@ describe('CalendarService', () => {
       expect((await service.getStats(user)).currentStreakWeeks).toBe(0);
     });
 
+    it('uses the default weekly goal for weeks without an explicit goal', async () => {
+      const ctx = buildService();
+      ctx.goals.set('2026-09-21', 1);
+      done(
+        ctx,
+        '2026-09-29',
+        '2026-10-01',
+        '2026-09-22',
+        '2026-09-15',
+        '2026-09-17',
+      );
+
+      const service = await ctx.create();
+      const stats = await service.getStats({
+        ...user,
+        defaultWeeklyGoal: 2,
+      });
+      expect(stats.currentStreakWeeks).toBe(3);
+    });
+
+    it('prefers an explicit goal over the default one', async () => {
+      const ctx = buildService();
+      ctx.goals.set('2026-09-28', 1);
+      done(ctx, '2026-09-29');
+
+      const service = await ctx.create();
+      const stats = await service.getStats({
+        ...user,
+        defaultWeeklyGoal: 5,
+      });
+      expect(stats.currentStreakWeeks).toBe(1);
+    });
+
+    it('does not break the streak when the current week has not met the default yet', async () => {
+      const ctx = buildService();
+      done(ctx, '2026-09-29', '2026-09-22', '2026-09-24');
+
+      const service = await ctx.create();
+      const stats = await service.getStats({
+        ...user,
+        defaultWeeklyGoal: 2,
+      });
+      expect(stats.currentStreakWeeks).toBe(1);
+    });
+
     it('is 0 when the user never set a goal', async () => {
       const ctx = buildService();
       const service = await ctx.create();
       expect((await service.getStats(user)).currentStreakWeeks).toBe(0);
+    });
+  });
+
+  describe('getWeeklyGoal', () => {
+    it('falls back to the default weekly goal when the week has no explicit goal', async () => {
+      const ctx = buildService();
+      const service = await ctx.create();
+
+      const withDefault = await service.getWeeklyGoal('2026-10-05', {
+        ...user,
+        defaultWeeklyGoal: 4,
+      });
+      const withoutDefault = await service.getWeeklyGoal('2026-10-05', user);
+
+      expect(withDefault.targetDays).toBe(4);
+      expect(withoutDefault.targetDays).toBeNull();
+    });
+
+    it('returns the explicit goal of the week when there is one', async () => {
+      const ctx = buildService();
+      ctx.goals.set('2026-10-05', 3);
+      const service = await ctx.create();
+
+      const goal = await service.getWeeklyGoal('2026-10-05', {
+        ...user,
+        defaultWeeklyGoal: 4,
+      });
+
+      expect(goal.targetDays).toBe(3);
+    });
+  });
+
+  describe('getStats totals', () => {
+    it('reports how many sessions the user has logged in total', async () => {
+      const ctx = buildService();
+      const service = await ctx.create();
+
+      const stats = await service.getStats(user);
+
+      expect(stats.totalSessions).toBe(7);
+      expect(ctx.historyEntryRepository.count).toHaveBeenCalledWith({
+        where: { user: { id: 'user-1' } },
+      });
     });
   });
 
