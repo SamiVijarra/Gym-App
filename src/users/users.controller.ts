@@ -11,7 +11,7 @@ import {
 import { UsersService } from './users.service';
 import { AuthGuard } from '@nestjs/passport';
 
-import { UpdateUserDto } from './dto';
+import { ChangePasswordDto, UpdateUserDto } from './dto';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { User } from './entities/user.entity';
 
@@ -43,5 +43,20 @@ export class UsersController {
       );
     }
     return this.usersService.update(user.id, updateUserDto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch(':id/password')
+  changePassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() changePasswordDto: ChangePasswordDto,
+    @GetUser() user: User,
+  ) {
+    if (user.id !== id) {
+      throw new ForbiddenException(
+        'You do not have permission to access this resource',
+      );
+    }
+    return this.usersService.changePassword(user.id, changePasswordDto);
   }
 }
