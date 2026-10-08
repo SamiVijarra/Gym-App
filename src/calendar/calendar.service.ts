@@ -422,6 +422,10 @@ export class CalendarService {
 
     const currentStreakWeeks = await this.calculateWeeklyStreak(user);
 
+    const totalSessions = await this.historyEntryRepository.count({
+      where: { user: { id: user.id } },
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const { total } = await this.historySetRepository
       .createQueryBuilder('set')
@@ -433,6 +437,7 @@ export class CalendarService {
       monthSessionsCompleted,
       monthActiveDays,
       currentStreakWeeks,
+      totalSessions,
       totalVolumeKg: Number(total) || 0,
     };
   }
@@ -517,7 +522,7 @@ export class CalendarService {
 
     return {
       weekStart,
-      targetDays: goal?.targetDays ?? null,
+      targetDays: goal?.targetDays ?? user.defaultWeeklyGoal ?? null,
       doneDays,
     };
   }
@@ -533,7 +538,9 @@ export class CalendarService {
         where: { user: { id: user.id }, weekStart: cursor },
       });
 
-      if (!goal) {
+      const targetDays = goal?.targetDays ?? user.defaultWeeklyGoal ?? null;
+
+      if (targetDays === null) {
         if (isCurrentWeek) {
           cursor = shiftIsoDate(cursor, -7);
           isCurrentWeek = false;
@@ -544,13 +551,13 @@ export class CalendarService {
 
       const doneDays = await this.countDoneDaysInWeek(user, cursor);
 
-      if (isCurrentWeek && doneDays < goal.targetDays) {
+      if (isCurrentWeek && doneDays < targetDays) {
         cursor = shiftIsoDate(cursor, -7);
         isCurrentWeek = false;
         continue;
       }
 
-      if (doneDays >= goal.targetDays) {
+      if (doneDays >= targetDays) {
         streak++;
         cursor = shiftIsoDate(cursor, -7);
         isCurrentWeek = false;
