@@ -13,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { User } from './entities/user.entity';
 interface PostgresError {
   code: string;
@@ -62,14 +63,9 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
-    const { password } = updateUserDto;
-    const userData = {
-      ...updateUserDto,
-      ...(password && { password: bcrypt.hashSync(password, 10) }),
-    };
     const user = await this.userRepository.preload({
       id,
-      ...userData,
+      ...updateUserDto,
     });
     if (!user) throw new NotFoundException(`User with id ${id} not found`);
     try {
@@ -79,6 +75,30 @@ export class UsersService {
     } catch (error) {
       this.handleDBErrors(error);
     }
+  }
+
+  async changePassword(id: string, changePasswordDto: ChangePasswordDto) {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    const user = await this.userRepository.findOne({
+      where: { id },
+      select: { id: true, password: true },
+    });
+    if (!user) throw new NotFoundException(`User with id ${id} not found`);
+
+    if (!bcrypt.compareSync(currentPassword, user.password)) {
+      throw new BadRequestException('The current password is incorrect');
+    }
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'The new password must be different from the current one',
+      );
+    }
+
+    await this.userRepository.update(id, {
+      password: bcrypt.hashSync(newPassword, 10),
+    });
+    return { message: 'Password updated' };
   }
 
   async remove(id: string) {
