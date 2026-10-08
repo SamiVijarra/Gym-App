@@ -1,11 +1,14 @@
 import {
   IsDateString,
   IsEmail,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -37,4 +40,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsDateString()
   birthDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(7)
+  defaultWeeklyGoal?: number;
 }
