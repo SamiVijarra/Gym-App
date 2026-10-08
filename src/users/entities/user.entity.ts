@@ -28,6 +28,9 @@ export class User {
   @Column('numeric', { precision: 10, scale: 2, nullable: true })
   height?: number;
 
+  @Column('int', { nullable: true })
+  defaultWeeklyGoal?: number | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 }
