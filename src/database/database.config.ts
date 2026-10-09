@@ -9,6 +9,13 @@ export function getDatabaseOptions(): DataSourceOptions {
     username: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    ssl:
+      process.env.DB_SSL === 'true'
+        ? {
+            rejectUnauthorized:
+              process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+          }
+        : false,
     migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   };
 }
